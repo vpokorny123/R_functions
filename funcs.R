@@ -1,3 +1,4 @@
+#checking 
 run.cocor.dep.groups.overlap<- function(j,k,h){
   library(cocor)
   r.jk = cor.test(j,k)$estimate
