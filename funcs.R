@@ -1,4 +1,14 @@
 #checking 
+vjp_hist <- function(x, label){
+  hist(x, main = NULL)
+  mu<-round(mean(x, na.rm = TRUE),3)
+  sigma<-round(sd(x, na.rm = TRUE),3)
+  mini<- round(min(x, na.rm = TRUE),3)
+  maxi<- round(max(x, na.rm = TRUE),3)
+  mtext(paste0('m = ', mu,', sd = ',sigma,', min = ',mini,', max = ',maxi))
+  title(label)
+}
+
 run.cocor.dep.groups.overlap<- function(j,k,h){
   library(cocor)
   r.jk = cor.test(j,k)$estimate
