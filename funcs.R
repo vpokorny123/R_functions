@@ -1,6 +1,56 @@
+
+vjp_corrplot <- function(df){
+  library(corrplot)
+  cor_mat<-cor(df, use = "pairwise.complete.obs")
+  corrplot(cor_mat, method = 'number',type = "upper",
+           tl.cex = .6,number.cex = .55)
+}
 #checking 
+build_lm_formula <-function(x){
+  for (j in seq(x)){
+    variable = x[j]
+    if (j == 1){
+      lm_formula = paste0(variable,' ~ ')
+    } else if (j == 2) {
+      lm_formula = paste0(lm_formula, variable)
+    }else {
+      lm_formula = paste0(lm_formula,' + ',variable)
+    }
+  }
+  return(formula(lm_formula))
+}
+impute_lm <- function(y,x, data){
+  model_variables <- c(y, x)
+  
+  #just constructing the lm_formula
+  for (j in seq(model_variables)){
+    variable = model_variables[j]
+    if (j == 1){
+      lm_formula = paste0('scale(',variable,') ~ ')
+    } else if (j == 2) {
+      lm_formula = paste0(lm_formula,'scale(',variable,')')
+    }else {
+      lm_formula = paste0(lm_formula,' + scale(',variable,')')
+    }
+  }
+  
+  #now we create an impute object
+  imputed_data <- data %>% 
+    select(all_of(model_variables)) %>%
+    mice(pred = quickpred(.),seed = 123,m = 10) 
+  
+  #now we can fit 5 linear regressions and pool across them 
+  fit<-with(imputed_data, lm(formula = formula(lm_formula)))
+  results<-summary(pool(fit))
+  round_ps<-round(results$p.value,3)
+  final_results<-cbind(results, round_ps)
+  return(final_results)
+  
+}
+
+
 vjp_hist <- function(x, label){
-  hist(x, main = NULL)
+  hist(x, main = NULL, breaks = 'Scott')
   mu<-round(mean(x, na.rm = TRUE),3)
   sigma<-round(sd(x, na.rm = TRUE),3)
   mini<- round(min(x, na.rm = TRUE),3)
@@ -26,7 +76,7 @@ unifactorScores <- function(X){
   library(fungible)
   complete_cases <- complete.cases(X)
   na_idx <- which(!complete.cases(X))
-  X_complete = X[complete_cases]
+  X_complete = X[complete_cases,]
   fac_res<-faMain(X = X_complete, numFactors = 1)
   scores<-faScores(X =X_complete, faMainObject = fac_res, Method = 'Thurstone')
   # FSI can be computed from fac res as S'RS where S is the structure (i.e. pattern or loadings %*% phi)
@@ -62,9 +112,9 @@ fscore_cor <- function(X, y){
 scatterplot<- function(x,y){
   xlab = deparse(substitute(x))
   ylab = deparse(substitute(y))
-  r2 = cor.test(x, y)$estimate^2
+  res = cor.test(x, y)
   plot(x, y, xlab = xlab, ylab = ylab)
-  mtext(round(r2,2))
+  mtext(pub_ready_stats(res))
 }
 
 plot_groups <- function(df,group_var){
