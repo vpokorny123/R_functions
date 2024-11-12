@@ -1,20 +1,58 @@
+pub_ready_reg_table <- function(x){
+  res_sum      <- summary(x)
+  coefficients <- round(res_sum$coefficients,3)
+  ps <- unname(coefficients[,'Pr(>|t|)'])
+  ps<-ifelse(ps == 0, "<.001",as.character(ps))
+  betas<-unname(coefficients[,'Estimate'])
+  betas<-ifelse(betas== 0, "<.001",as.character(betas))
+  coefficients[,'Pr(>|t|)'] <- ps
+  coefficients[,'Estimate'] <- betas
+  coef_names<-rownames(coefficients)
+  coef_name<-gsub('`','',coef_names)
+  rownames(coefficients)<-coef_name
+  library(sensemakr)
+  r2_coefs<-round(partial_r2(x),3)
+  r2_coefs<-ifelse(r2_coefs== 0, "<.001",as.character(r2_coefs))
+  reg_table<-cbind(coefficients,r2_coefs)
+  #let's add full model R squared and adjusted R squared
+  rsquared<-round(res_sum$r.squared,3)
+  rsquared_adj<-round(res_sum$adj.r.squared,3)
+  ` ` <- c(paste0('Full Model R^2 = ',rsquared, '; ',
+                  'Adjusted R^2 = ', rsquared_adj),
+           "","","","")
+  pub_ready_reg_table<-rbind(reg_table, ` `)
+  return(pub_ready_reg_table)
+}
 
-vjp_corrplot <- function(df){
+
+vjp_corrplot <- function(df,p){
   library(corrplot)
-  cor_mat<-cor(df, use = "pairwise.complete.obs")
-  corrplot(cor_mat, method = 'number',type = "upper",
-           tl.cex = .6,number.cex = .55)
+  library(psych)
+  #cor_mat <- cor(df, use = "pairwise.complete.obs")
+  cor_res <- psych::corr.test(df, adjust = 'fdr')
+  cor_mat <- cor_res$r
+  p_mat <- cor_res$p
+  corrplot(cor_mat, p.mat = p_mat,
+           method = c('circle'),type = "upper",
+           tl.cex = .6, number.cex = .65,
+           sig.level = .05, diag = FALSE,
+           insig = 'label_sig', pch.cex = 1,
+           pch.col = 'black',
+           col = rev(COL2('RdBu', 100)))
+  
 }
 #checking 
-build_lm_formula <-function(x){
+build_lm_formula <-function(x, interactions = FALSE){
   for (j in seq(x)){
     variable = x[j]
     if (j == 1){
-      lm_formula = paste0(variable,' ~ ')
+      lm_formula = paste0('`',variable,'` ~ `')
     } else if (j == 2) {
-      lm_formula = paste0(lm_formula, variable)
-    }else {
-      lm_formula = paste0(lm_formula,' + ',variable)
+      lm_formula = paste0(lm_formula, variable, '`')
+    }else if (j>2 & interactions == TRUE){
+      lm_formula = paste0(lm_formula,' * `',variable, '`')
+    }else if (j>2 & interactions ==FALSE){
+      lm_formula = paste0(lm_formula,' + `',variable, '`')
     }
   }
   return(formula(lm_formula))
@@ -26,37 +64,57 @@ impute_lm <- function(y,x, data){
   for (j in seq(model_variables)){
     variable = model_variables[j]
     if (j == 1){
-      lm_formula = paste0('scale(',variable,') ~ ')
+      lm_formula = paste0(variable,' ~ ')
     } else if (j == 2) {
-      lm_formula = paste0(lm_formula,'scale(',variable,')')
+      lm_formula = paste0(lm_formula,variable)
     }else {
-      lm_formula = paste0(lm_formula,' + scale(',variable,')')
+      lm_formula = paste0(lm_formula,' + ',variable)
     }
   }
+  # for (j in seq(model_variables)){
+  #   variable = model_variables[j]
+  #   if (j == 1){
+  #     lm_formula = paste0('scale(',variable,') ~ ')
+  #   } else if (j == 2) {
+  #     lm_formula = paste0(lm_formula,'scale(',variable,')')
+  #   }else {
+  #     lm_formula = paste0(lm_formula,' + scale(',variable,')')
+  #   }
+  # }
+  #lm_formula<-build_lm_formula(model_variables)
   
   #now we create an impute object
   imputed_data <- data %>% 
     select(all_of(model_variables)) %>%
-    mice(pred = quickpred(.),seed = 123,m = 10) 
+    mice(pred = quickpred(.), seed = 123, m = 10) 
   
   #now we can fit 5 linear regressions and pool across them 
   fit<-with(imputed_data, lm(formula = formula(lm_formula)))
   results<-summary(pool(fit))
+  rsquared_adj<-round(pool.r.squared(fit, adjusted = TRUE)[1,1],3)
+  rsquared<-round(pool.r.squared(fit, adjusted = FALSE)[1,1],3)
   round_ps<-round(results$p.value,3)
-  final_results<-cbind(results, round_ps)
+  #browser()
+  cleaner_results<-cbind(results, round_ps)
+  final_results <- list(cleaner_results, 
+                        rsquared_adj, 
+                        rsquared)
+  names(final_results) <- c("main_results","rsquared_adj","rsquared")
   return(final_results)
   
 }
 
 
-vjp_hist <- function(x, label){
+vjp_hist <- function(x, label = NULL){
   hist(x, main = NULL, breaks = 'Scott')
   mu<-round(mean(x, na.rm = TRUE),3)
   sigma<-round(sd(x, na.rm = TRUE),3)
   mini<- round(min(x, na.rm = TRUE),3)
   maxi<- round(max(x, na.rm = TRUE),3)
   mtext(paste0('m = ', mu,', sd = ',sigma,', min = ',mini,', max = ',maxi))
+  if (!is.null(label)){
   title(label)
+  }
 }
 
 run.cocor.dep.groups.overlap<- function(j,k,h){
@@ -145,11 +203,11 @@ mediating_func <- function(x,m,y,control.value, treat.value, data){
                     sims = 5000)
   } else {
     result<-mediate(mediator_model, outcome_model, 
-                  treat = 'data[[x]]',
-                  mediator = 'data[[m]]',
-                  control.value = control.value,
-                  treat.value = treat.value,
-                  sims = 5000)
+                    treat = 'data[[x]]',
+                    mediator = 'data[[m]]',
+                    control.value = control.value,
+                    treat.value = treat.value,
+                    sims = 5000)
   }
   return(result) 
 }
@@ -165,7 +223,7 @@ pub_ready_stats<-function(x) {
     rownames(pest)<- pest$Effect
     for (j in rownames(anov_table)) {
       fstat = round(anov_table[j,"F"], digits = 2)
-      pval = round(anov_table[j,"Pr(>F)"], digits = 2)
+      pval = round(anov_table[j,"Pr(>F)"], digits = 3)
       ifelse(pval==0, pval<-"<.001",pval<-paste0('=',pval))
       df1 = round(anov_table[j,"num Df"],digits =2)
       df2 = round(anov_table[j,"den Df"],digits =2)
@@ -178,7 +236,7 @@ pub_ready_stats<-function(x) {
   if (all(class(x)==c("psych","fa"))){
     #x$STATISTIC is what we want to report unless something funky's goin on
     chi<-round(x$STATISTIC,digits = 2)
-    ifelse(round(x$PVAL,digits = 2)==0, pval<-"<.001",pval<-paste0('=',round(x$PVAL,digits = 2)))
+    ifelse(round(x$PVAL,digits = 3)==0, pval<-"<.001",pval<-paste0('=',round(x$PVAL,digits = 3)))
     chi_rep<- paste0(greekLetters::greeks("chi^2"),'(',x$dof,')=',chi,', p',pval)
     x$CFI<-((x$null.chisq-x$null.dof)-
               (x$STATISTIC-x$dof))/(x$null.chisq-x$null.dof)
@@ -245,7 +303,7 @@ pub_ready_stats<-function(x) {
     ifelse(pval==0, pval<-"<.001",pval<-paste0('=',pval))
     #browser()
     acme<-paste0("ACME ", greeks("beta"),"=",acme_b,", 95% CI [",acme_ci[1],", ",
-                   acme_ci[2],"], p",pval)
+                 acme_ci[2],"], p",pval)
     acme_output<-cbind('mediation',acme)
     model_m<-x$model.m
     x_to_m <- pub_ready_stats(model_m)
@@ -292,7 +350,7 @@ pub_ready_stats<-function(x) {
       idx = 1
       for (j in rownames(res_sum)) {
         tstat = round(res_sum[j,"t value"], digits = 2)
-        pval = round(res_sum[j,"Pr(>|t|)"], digits = 2)
+        pval = round(res_sum[j,"Pr(>|t|)"], digits = 3)
         ifelse(pval==0, pval<-"<.001",pval<-paste0('=',pval))
         b = round(res_sum[j,"Estimate"],3)
         r2_coef = round(r2_coefs[idx],3)
