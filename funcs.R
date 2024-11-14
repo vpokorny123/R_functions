@@ -24,6 +24,26 @@ pub_ready_reg_table <- function(x){
   return(pub_ready_reg_table)
 }
 
+vjp_rectangle_corrplot <- function(row_variables, column_variables){
+  #NOTE if you're having trouble running this. It may be because you have
+  #a single variables in row_variables. this function CAN handle this, but
+  #the input needs to be df[rows_variables], NOT df[,row_variables]. The
+  #latter way removes the name from the vector which causes problems later
+  #on
+  library(corrplot)
+  cor_res <- psych::corr.test(x = row_variables, y =column_variables, 
+                              use = 'pairwise', adjust = 'fdr')
+  cor_mat <- cor_res$r
+  p_mat <- cor_res$p
+  corrplot(cor_mat, #p.mat = p_mat,
+           method = c('circle'),type = 'upper',
+           tl.cex = .6, number.cex = .65,
+           sig.level = .05, diag = FALSE,
+           insig = 'label_sig', pch.cex = 1,
+           pch.col = 'black',
+           col = rev(COL2('RdBu', 100)))
+  
+}
 
 vjp_corrplot <- function(df,p){
   library(corrplot)
