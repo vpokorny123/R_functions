@@ -591,7 +591,7 @@ plot_conditions <- function(df,cond_var, dv , xlab = NULL, ylab = NULL,
 
 
 plot_groups <- function(
-    df, group_var, dv,
+    df =NULL, group_var=NULL, dv=NULL,
     condition = NULL, task_var = NULL, facet_var = NULL,
     xlab = NULL, ylab = NULL,
     dodge_width = 0.2,              # spacing of group summaries
@@ -608,7 +608,6 @@ plot_groups <- function(
     # summary appearance
     summary_shape_size = 2.5         # NEW: size of summary points
 ) {
-  
   if (is.null(xlab)) xlab <- if (!is.null(condition)) condition else group_var
   if (is.null(ylab)) ylab <- dv
   font_size <- 15
